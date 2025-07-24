@@ -1,0 +1,64 @@
+CREATE TABLE companies (
+    id SERIAL PRIMARY KEY,
+    name VARCHAR(255) NOT NULL UNIQUE,
+    created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE warehouses (
+    id SERIAL PRIMARY KEY,
+    company_id INTEGER NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+    name VARCHAR(255) NOT NULL,
+    location VARCHAR(255),
+    created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE products (
+    id SERIAL PRIMARY KEY,
+    sku VARCHAR(50) NOT NULL UNIQUE,  -- Platform-wide unique
+    name VARCHAR(255) NOT NULL,
+    description TEXT,
+    price DECIMAL(10,2) NOT NULL CHECK (price > 0),
+    is_bundle BOOLEAN NOT NULL DEFAULT false,
+    created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE bundles (
+    parent_product_id INTEGER NOT NULL REFERENCES products(id) ON DELETE CASCADE,
+    child_product_id INTEGER NOT NULL REFERENCES products(id) ON DELETE CASCADE,
+    quantity INTEGER NOT NULL CHECK (quantity > 0),
+    PRIMARY KEY (parent_product_id, child_product_id)
+);
+
+CREATE TABLE suppliers (
+    id SERIAL PRIMARY KEY,
+    name VARCHAR(255) NOT NULL,
+    contact_info JSONB  -- {email, phone, address}
+);
+
+CREATE TABLE product_suppliers (
+    product_id INTEGER NOT NULL REFERENCES products(id) ON DELETE CASCADE,
+    supplier_id INTEGER NOT NULL REFERENCES suppliers(id) ON DELETE CASCADE,
+    company_id INTEGER NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+    PRIMARY KEY (product_id, supplier_id, company_id)
+);
+
+CREATE TABLE inventory (
+    warehouse_id INTEGER NOT NULL REFERENCES warehouses(id) ON DELETE CASCADE,
+    product_id INTEGER NOT NULL REFERENCES products(id) ON DELETE CASCADE,
+    quantity INTEGER NOT NULL CHECK (quantity >= 0),
+    last_updated TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (warehouse_id, product_id)
+);
+
+CREATE TABLE inventory_history (
+    id SERIAL PRIMARY KEY,
+    warehouse_id INTEGER NOT NULL,
+    product_id INTEGER NOT NULL,
+    old_quantity INTEGER NOT NULL,
+    new_quantity INTEGER NOT NULL,
+    delta INTEGER NOT NULL GENERATED ALWAYS AS (new_quantity - old_quantity) STORED,
+    change_type VARCHAR(20) NOT NULL,  -- RESTOCK, SALE, ADJUSTMENT, etc.
+    source_id INTEGER,  -- Reference to order/shipment/adjustment ID
+    changed_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (warehouse_id, product_id) REFERENCES inventory(warehouse_id, product_id)
+);
